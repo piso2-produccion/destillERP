@@ -228,7 +228,12 @@ function imgUpload(tipo,id,input){
   var file=input.files[0];if(!file)return;
   if(file.size>2*1024*1024){alert('La imagen no puede superar 2MB. Reducí el tamaño antes de subir.');return;}
   var r=new FileReader();
-  r.onload=function(e){setImg(tipo,id,e.target.result);render();};
+  r.onload=function(e){
+    S.imagenes[tipo+'_'+id]=e.target.result;
+    // Save silently without toast
+    try{var d={};FIELDS.forEach(function(k){d[k]=S[k];});localStorage.setItem(DB,JSON.stringify(d));}catch(ex){console.warn(ex);}
+    render();
+  };
   r.readAsDataURL(file);
 }
 function imgThumb(tipo,id,w,h,radius){
@@ -463,8 +468,27 @@ function doLogin(){
   var email=gv('lemail').trim(),pass=gv('lpass'),err=document.getElementById('lerr');
   if(!email||!pass){err.style.display='block';err.textContent='Completá todos los campos';return;}
   var btn=document.getElementById('lbtn');btn.disabled=true;btn.textContent='Ingresando...';
-  // Load data first if not loaded
-  if(!S.loaded){load();}
+  // Load data silently if not yet loaded (don't call render mid-login)
+  if(!S.loaded){
+    try{
+      var raw=localStorage.getItem(DB);
+      if(raw){var d=JSON.parse(raw);FIELDS.forEach(function(k){if(d[k]!==undefined)S[k]=d[k];});}
+      if(!S.unidades.length)S.unidades=[
+        {id:'u1',nombre:'Litros',simbolo:'L',tipo:'volumen'},
+        {id:'u2',nombre:'Kilogramos',simbolo:'kg',tipo:'masa'},
+        {id:'u3',nombre:'Gramos',simbolo:'g',tipo:'masa'},
+        {id:'u4',nombre:'Mililitros',simbolo:'ml',tipo:'volumen'},
+        {id:'u5',nombre:'Unidades',simbolo:'u',tipo:'unidad'},
+        {id:'u6',nombre:'Cajas',simbolo:'cj',tipo:'unidad'},
+      ];
+      if(!S.system_users||!S.system_users.length){
+        S.system_users=[{id:uid(),email:'admin@piso2.com',password:'admin123',
+          nombre:'Administrador',rol:'admin',activo:true,
+          modulos:ALL_MODULES.map(function(m){return m.id;})}];
+      }
+    }catch(e){console.warn(e);}
+    S.loaded=true;
+  }
   setTimeout(function(){
     var found=S.system_users.find(function(u){
       return u.email.toLowerCase()===email.toLowerCase()&&u.password===pass&&u.activo!==false;
@@ -474,7 +498,6 @@ function doLogin(){
       btn.disabled=false;btn.textContent='Ingresar al sistema';return;
     }
     S.user=found;
-    // Default to first allowed module
     var mods=found.modulos||[];
     if(mods.indexOf(S.activeSection)<0&&mods.length)S.activeSection=mods[0];
     render();
